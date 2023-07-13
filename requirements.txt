@@ -1,0 +1,6 @@
+torch
+torchvision
+Pillow
+opencv-python
+emoji
+requests
