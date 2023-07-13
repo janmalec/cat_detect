@@ -11,7 +11,7 @@ import emoji
 import time
 import requests
 
-def check_cat(frame):
+def check_cat(frame, filter='cat&dog'):
     # Load the pre-trained model (ResNet-18) and set it to evaluation mode
     #model = torchvision.models.resnet18(weights=torchvision.models.ResNet18_Weights.DEFAULT)
     # try ResNet-50
@@ -65,9 +65,24 @@ def check_cat(frame):
     # Print the result
     print(f'The top predicted class is: {classes[topN.indices[0][0]]}')
 
-    # if 'cat' in top 5 classes, return True
-    if any('cat' in classes[topN.indices[0][i]] for i in range(N)):
-        return True
+    if filter == 'cat':
+        # if 'cat' in top 5 classes, return True
+        if any('cat' in classes[topN.indices[0][i]] for i in range(N)):
+            return True
+    else:
+        # List of keywords for breeds of cats and dogs
+        keywords = [
+            # cat breeds
+            'egyptian cat', 'tiger cat', 'persian cat', 'siamese cat', 'tabby', 'lynx', 
+            'leopard', 'jaguar', 'lion', 'tiger', 'cheetah', 
+            # dog breeds that may look similar to cats
+            'pomeranian', 'papillon', 'maltese dog', 'chihuahua', 'japanese spaniel', 'pekinese', 'shih-tzu',
+            'border', 'collie', 'husky', 'dog'
+        ]
+
+        # if any of the top 5 classes contain a cat/dog breed keyword, return True
+        if any(any(keyword in classes[topN.indices[0][i]] for keyword in keywords) for i in range(N)):
+            return True
     
     return False
 
@@ -87,7 +102,9 @@ def detect_motion(frame1, frame2):
             continue
         else:
             # Write log message with timestamp and motion detection area
-            logfile.write(f'{datetime.now().strftime("%Y%m%d_%H%M%S")} {emoji.emojize(":cat_face:", use_aliases=True)} Motion detected with {cv2.contourArea(contour)} \n')
+            logfile.write(f'{datetime.now().strftime("%Y%m%d_%H%M%S")} {emoji.emojize(":cat_face:")} Motion detected with {cv2.contourArea(contour)} \n')
+            # flush
+            logfile.flush()
     return False
 
 if __name__ == '__main__':
