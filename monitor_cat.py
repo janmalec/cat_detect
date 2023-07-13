@@ -118,11 +118,12 @@ if __name__ == '__main__':
             if check_cat(frame2):
                 cv2.imwrite(f'cats/cat_detected_{timestamp}.jpg', frame2)
                 print("Cat detected and image saved!")
-                # ntfy alert with the image using requests
-                with open(f'cats/cat_detected_{timestamp}.jpg', 'rb') as f:
-                    r = requests.post(f'https://ntfy.sh/{args.topic}', 
-                                    data = {'title': 'Cat detected 🐈'},
-                                    files={'image': f})
+                # ntfy alert with the image using requests if topic is provided
+                if args.topic:
+                    with open(f'cats/cat_detected_{timestamp}.jpg', 'rb') as f:
+                        r = requests.post(f'https://ntfy.sh/{args.topic}', 
+                                        data = {'title': 'Cat detected 🐈'},
+                                        files={'image': f})
                 # sleep 5 seconds
                 time.sleep(5)
 
