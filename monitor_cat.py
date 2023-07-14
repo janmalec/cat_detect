@@ -77,7 +77,9 @@ def check_cat(frame, filter='cat&dog'):
             'leopard', 'jaguar', 'lion', 'tiger', 'cheetah', 
             # dog breeds that may look similar to cats
             'pomeranian', 'papillon', 'maltese dog', 'chihuahua', 'japanese spaniel', 'pekinese', 'shih-tzu',
-            'border', 'collie', 'husky', 'dog'
+            'border', 'collie', 'husky', 'dog', 'groenendael',
+            # other animals that may look similar to cats
+            'hog'
         ]
 
         # if any of the top 5 classes contain a cat/dog breed keyword, return True
