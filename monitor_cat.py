@@ -105,6 +105,7 @@ def detect_motion(frame1, frame2):
             logfile.write(f'{datetime.now().strftime("%Y%m%d_%H%M%S")} {emoji.emojize(":cat_face:")} Motion detected with {cv2.contourArea(contour)} \n')
             # flush
             logfile.flush()
+            return True
     return False
 
 if __name__ == '__main__':
@@ -122,8 +123,14 @@ if __name__ == '__main__':
     # Open the video
     cap = cv2.VideoCapture(args.rtsp_url)
 
-    _, frame1 = cap.read()
-    _, frame2 = cap.read()
+    try:
+        _, frame1 = cap.read()
+        _, frame2 = cap.read()
+    except cv2.error as e:
+        print(f'Error reading frames from camera: {e}')
+        logfile.write(f'{datetime.now().strftime("%Y%m%d_%H%M%S")} Error reading frames from camera: {e}\n')
+        # flush
+        logfile.flush()
     check_cat(frame1)
 
     while cap.isOpened():
@@ -137,10 +144,22 @@ if __name__ == '__main__':
                 print("Cat detected and image saved!")
                 # ntfy alert with the image using requests if topic is provided
                 if args.topic:
-                    with open(f'cats/cat_detected_{timestamp}.jpg', 'rb') as f:
-                        r = requests.post(f'https://ntfy.sh/{args.topic}', 
-                                        data = {'title': 'Cat detected 🐈'},
-                                        files={'image': f})
+                    try:
+                        with open(f'cats/cat_detected_{timestamp}.jpg', 'rb') as f:
+                            r = requests.post(f'https://ntfy.sh/{args.topic}', 
+                                                #data = {'title': 'Cat detected 🐈'},
+                                                data = f,
+                                                headers={'Filename': f'cat_detected_{timestamp}.jpg'})
+                            r.raise_for_status()
+                    except requests.exceptions.RequestException as e:
+                        print(f'Error sending notification: {e}')
+                        logfile.write(f'{datetime.now().strftime("%Y%m%d_%H:%M:%S")} Error sending notification: {e}\n')
+                    else:
+                        print(f'Notification sent: {r.text}')
+                        logfile.write(f'{datetime.now().strftime("%Y%m%d_%H%:M%:S")} {emoji.emojize(":bell:")} Notification sent\n')
+                    finally:
+                        # flush
+                        logfile.flush()
                 # sleep 5 seconds
                 time.sleep(5)
 
