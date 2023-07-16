@@ -29,9 +29,14 @@ def check_cat(frame, filter='cat&dog'):
         )
     ])
 
-    # Load the image from the file name given by argparse and apply the transform
-    image = Image.fromarray(frame)
-    image = transform(image)
+    try:
+        # Load the image from the file name given by argparse and apply the transform
+        image = Image.fromarray(frame)
+        image = transform(image)
+    except Exception as e:
+        print(f'Error loading image: {e}')
+        logfile.write(f'{datetime.now().strftime("%Y%m%d_%H:%M:%S")} Error loading image: {e}\n')
+        return False
 
     # Add a batch dimension and move the image to the device (CPU or GPU)
     image = image.unsqueeze(0)
@@ -88,11 +93,30 @@ def check_cat(frame, filter='cat&dog'):
     
     return False
 
-
+def read_image(cap):
+    while True:
+        success, frame = cap.read()
+        if success:
+            return frame
+        print('Failed to read image from camera, retrying...')
+        time.sleep(1)
 
 # Function to detect motion
 def detect_motion(frame1, frame2):
-    diff = cv2.absdiff(frame1, frame2)
+    # Check if the two frames are the same
+    if frame1 is None or frame2 is None:
+        return False
+    if frame1.shape != frame2.shape:
+        return False
+    if (frame1 == frame2).all():
+        return False
+    try:
+        diff = cv2.absdiff(frame1, frame2)
+    except cv2.error as e:
+        print(f'Error computing absolute difference: {e}')
+        logfile.write(f'{datetime.now().strftime("%Y%m%d_%H:%M:%S")} Error computing absolute difference: {e}\n')
+        logfile.flush()
+        return False
     gray = cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY)
     blur = cv2.GaussianBlur(gray, (5,5), 0)
     _, thresh = cv2.threshold(blur, 20, 255, cv2.THRESH_BINARY)
@@ -104,7 +128,7 @@ def detect_motion(frame1, frame2):
             continue
         else:
             # Write log message with timestamp and motion detection area
-            logfile.write(f'{datetime.now().strftime("%Y%m%d_%H%M%S")} {emoji.emojize(":cat_face:")} Motion detected with {cv2.contourArea(contour)} \n')
+            logfile.write(f'{datetime.now().strftime("%Y%m%d_%H:%M:%S")} {emoji.emojize(":cat_face:")} Motion detected with {cv2.contourArea(contour)} \n')
             # flush
             logfile.flush()
             return True
@@ -126,47 +150,68 @@ if __name__ == '__main__':
     cap = cv2.VideoCapture(args.rtsp_url)
 
     try:
-        _, frame1 = cap.read()
-        _, frame2 = cap.read()
+        frame1 = read_image(cap)
+        frame2 = read_image(cap)
     except cv2.error as e:
         print(f'Error reading frames from camera: {e}')
-        logfile.write(f'{datetime.now().strftime("%Y%m%d_%H%M%S")} Error reading frames from camera: {e}\n')
-        # flush
+        logfile.write(f'{datetime.now().strftime("%Y%m%d_%H:%M:%S")} Error reading frames from camera: {e}\n')
         logfile.flush()
     check_cat(frame1)
 
     while cap.isOpened():
-        motion_detected = detect_motion(frame1, frame2)
-        timestamp = datetime.now().strftime("%Y%m%d_%H:%M:%S")
+        try:
+            motion_detected = detect_motion(frame1, frame2)
+        except Exception as e:
+            print(f'{datetime.now().strftime("%Y%m%d_%H:%M:%S")} Error detecting motion: {e} \n')
+            logfile.write(f'{datetime.now().strftime("%Y%m%d_%H:%M:%S")} Error detecting motion: {e} \n')
+            logfile.write(f'frame1 type: {type(frame1)}\n')
+            logfile.write(f'frame2 type: {type(frame2)}\n')
+            logfile.flush()
+        else:
+            logfile.write(f'{motion_detected}\n')
+            timestamp = datetime.now().strftime("%Y%m%d_%H:%M:%S")
+            if motion_detected:
+                cv2.imwrite(f'motion_pics/{timestamp}.jpg', frame2)
+                if check_cat(frame2):
+                    cv2.imwrite(f'cats/cat_detected_{timestamp}.jpg', frame2)
+                    print("Cat detected and image saved!")
+                    # ntfy alert with the image using requests if topic is provided
+                    if args.topic:
+                        try:
+                            with open(f'cats/cat_detected_{timestamp}.jpg', 'rb') as f:
+                                r = requests.post(f'https://ntfy.sh/{args.topic}', 
+                                                    #data = {'title': 'Cat detected 🐈'},
+                                                    data = f,
+                                                    headers={'Filename': f'cat_detected_{timestamp}.jpg'})
+                                r.raise_for_status()
+                        except requests.exceptions.RequestException as e:
+                            print(f'Error sending notification: {e}')
+                            logfile.write(f'{datetime.now().strftime("%Y%m%d_%H:%M:%S")} Error sending notification: {e}\n')
+                        else:
+                            print(f'Notification sent: {r.text}')
+                            logfile.write(f'{datetime.now().strftime("%Y%m%d_%H%:M%:S")} {emoji.emojize(":bell:")} Notification sent\n')
+                        finally:
+                            # flush
+                            logfile.flush()
+                    # sleep _ seconds
+                    time.sleep(30)
 
-        if motion_detected:
-            cv2.imwrite(f'motion_pics/{timestamp}.jpg', frame2)
-            if check_cat(frame2):
-                cv2.imwrite(f'cats/cat_detected_{timestamp}.jpg', frame2)
-                print("Cat detected and image saved!")
-                # ntfy alert with the image using requests if topic is provided
-                if args.topic:
-                    try:
-                        with open(f'cats/cat_detected_{timestamp}.jpg', 'rb') as f:
-                            r = requests.post(f'https://ntfy.sh/{args.topic}', 
-                                                #data = {'title': 'Cat detected 🐈'},
-                                                data = f,
-                                                headers={'Filename': f'cat_detected_{timestamp}.jpg'})
-                            r.raise_for_status()
-                    except requests.exceptions.RequestException as e:
-                        print(f'Error sending notification: {e}')
-                        logfile.write(f'{datetime.now().strftime("%Y%m%d_%H:%M:%S")} Error sending notification: {e}\n')
-                    else:
-                        print(f'Notification sent: {r.text}')
-                        logfile.write(f'{datetime.now().strftime("%Y%m%d_%H%:M%:S")} {emoji.emojize(":bell:")} Notification sent\n')
-                    finally:
-                        # flush
-                        logfile.flush()
-                # sleep 5 seconds
-                time.sleep(5)
+        # check if frame2 contains data
+        if frame2 is None:
+            frame1 = cap.read()
+            time.sleep(1)
+        else:
+            frame1 = frame2
+        try:
+            ret, frame2 = cap.read()
+        except cv2.error as e:
+            print(f'Error reading frames from camera: {e}')
+            logfile.write(f'{datetime.now().strftime("%Y%m%d_%H:%M:%S")} Error reading frames from camera: {e}\n')
+            logfile.flush()
+            break
 
-        frame1 = frame2
-        ret, frame2 = cap.read()
+        # sleep one second
+        time.sleep(1)
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
